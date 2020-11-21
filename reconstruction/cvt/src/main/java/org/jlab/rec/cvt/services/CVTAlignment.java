@@ -1,6 +1,7 @@
 package org.jlab.rec.cvt.services;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -456,10 +457,8 @@ public class CVTAlignment extends ReconstructionEngine {
 			System.out.println("rejecting track");
 			return false;
 		}
-		int index = getIndexSVT(region-1, sector-1);
-		if(svtTopBottomSep && (layer-1)%2==1) {
-			index += 42;
-		}
+		int index = getIndexSVT(layer-1, sector-1);
+		
 		
 		//Use the same reference point for both inner and outer layer of region
 		Vector3d cref = getModuleReferencePoint(sector,layer);
@@ -513,14 +512,18 @@ public class CVTAlignment extends ReconstructionEngine {
 			double phi = Math.atan2(u.y,u.x);
 			Vector3d csphi = new Vector3d(Math.cos(phi), Math.sin(phi),0);
 			Vector3d mscphi = new Vector3d(-Math.sin(phi), Math.cos(phi),0);
+			double cosdip = Math.hypot(u.x, u.y);
 			double d = mscphi.dot(xref);
 			B.set(i, 0, s.dot(mscphi.minus(u.times(n.dot(mscphi)/udotn))));
-			B.set(i, 1, s.dot(csphi.times(-d)
-					.plus(mscphi.times(n.dot(e.minus(xref))/udotn))
-					.minus(u.times(mscphi.dot(n)*n.dot(e.minus(xref))/(udotn*udotn)))
-					.plus(u.times(d*n.dot(csphi)/udotn)))
-					);
-			B.set(i, 2, s.z);
+			//B.set(i, 1, s.dot(csphi.times(-d)
+			//		.plus(mscphi.times(n.dot(e.minus(xref))/udotn))
+			//		.minus(u.times(mscphi.dot(n)*n.dot(e.minus(xref))/(udotn*udotn)))
+			//		.plus(u.times(d*n.dot(csphi)/udotn)))
+			//		);
+			B.set(i, 1, -s.dot(csphi)*d
+					    + cosdip*(s.dot(mscphi)/udotn-sdotu/(udotn*udotn)*n.dot(mscphi))*n.dot(e.minus(xref))
+						+ sdotu/udotn*d*n.dot(csphi));
+			B.set(i, 2, s.z-sdotu*n.z/udotn);
 			B.set(i, 3, (s.z/udotn-n.z*sdotu/(udotn*udotn))*n.dot(e.minus(xref)));
 			
 			
@@ -534,15 +537,21 @@ public class CVTAlignment extends ReconstructionEngine {
 
 
 
-	int getIndexSVT(int region, int sect){
+	private int getIndexSVT(int layer, int sect){
+		int index = -1;
+		int region = layer/2;
 		if (region == 0)
-			return sect;
-		if (region == 1)
-			return org.jlab.rec.cvt.svt.Constants.NSECT[0] + sect;
-		if (region == 2)
-			return org.jlab.rec.cvt.svt.Constants.NSECT[0] +
+			index = sect;
+		else if (region == 1)
+			index =  org.jlab.rec.cvt.svt.Constants.NSECT[0] + sect;
+		else if (region == 2)
+			index = org.jlab.rec.cvt.svt.Constants.NSECT[0] +
 					org.jlab.rec.cvt.svt.Constants.NSECT[2] + sect;
-		return -1;
+		if(svtTopBottomSep && layer%2==1) {
+			index += 42;
+		}
+		return index;
+		
 	}
 
 	private Vector3d getModuleReferencePoint(int sector, int layer) {
@@ -599,6 +608,8 @@ public class CVTAlignment extends ReconstructionEngine {
 		//cp = new HackConstantsProvider(cp);
 		cp = SVTConstants.connect( cp );
 		cp.disconnect();  
+		System.out.println("Check SVT Geom lay1 sec1:  " + Arrays.toString(SVTConstants.getLayerSectorAlignmentData()[0][0]));
+		System.out.println("Check SVT Geom lay1 sec1:  " + Arrays.toString(SVTConstants.getLayerSectorAlignmentData()[0][1]));
 		SVTStripFactory svtFac = new SVTStripFactory(cp, true);
 		SVTGeom.setSvtStripFactory(svtFac);
 
