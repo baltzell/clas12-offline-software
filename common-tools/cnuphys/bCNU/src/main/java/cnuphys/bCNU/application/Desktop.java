@@ -237,28 +237,35 @@ public final class Desktop extends JDesktopPane {
 
 		File file = Environment.getInstance().getConfigurationFile();
 
-		if ((file != null) && file.exists() && file.canRead()) {
-			try {
-				FileInputStream fis = new FileInputStream(file);
-				_properties = new Properties();
+		try {
+			if ((file != null) && file.exists() && file.canRead()) {
 				try {
-					_properties.loadFromXML(fis);
-				} catch (InvalidPropertiesFormatException e) {
-					e.printStackTrace();
-				} catch (IOException e) {
+					FileInputStream fis = new FileInputStream(file);
+					_properties = new Properties();
+					try {
+						_properties.loadFromXML(fis);
+					} catch (InvalidPropertiesFormatException e) {
+						e.printStackTrace();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					try {
+						fis.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					Log.getInstance().info("Loaded a configuration file from [" + file.getPath() + "]");
+				} catch (FileNotFoundException e) {
 					e.printStackTrace();
 				}
-				try {
-					fis.close();
-				} catch (IOException e) {
-					e.printStackTrace();
+			} else {
+				Log log = Log.getInstance();
+				if (log != null) {
+					Log.getInstance().info("Did not load a configuration file.");
 				}
-				Log.getInstance().info("Loaded a configuration file from [" + file.getPath() + "]");
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
 			}
-		} else {
-			Log.getInstance().info("Did not load a configuration file from [" + file.getPath() + "]");
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 
