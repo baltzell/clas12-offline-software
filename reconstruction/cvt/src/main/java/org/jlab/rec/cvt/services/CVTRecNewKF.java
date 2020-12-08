@@ -102,7 +102,7 @@ public class CVTRecNewKF extends ReconstructionEngine {
             Constants.setSolenoidscale(SolenoidScale);
             float[]b = new float[3];
             Swim swimmer = new Swim();
-            swimmer.BfieldLab(0, 0, org.jlab.rec.cvt.Constants.getZoffset()/10, b);
+            swimmer.BfieldLab(0, 0, 0, b);
             Constants.setSolenoidVal(Math.abs(b[2]));
             Constants.Load(isCosmics, isSVTonly);
             this.setRun(newRun); 
@@ -131,7 +131,7 @@ public class CVTRecNewKF extends ReconstructionEngine {
     public boolean processDataEvent(DataEvent event) {
         
         this.setRunConditionsParameters(event, FieldsConfig, Run, false, "");
-        double shift = org.jlab.rec.cvt.Constants.getZoffset();
+        double shift = 0;//org.jlab.rec.cvt.Constants.getZoffset();
 
         this.FieldsConfig = this.getFieldsConfig();
         
