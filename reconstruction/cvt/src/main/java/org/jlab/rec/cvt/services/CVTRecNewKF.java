@@ -207,12 +207,13 @@ public class CVTRecNewKF extends ReconstructionEngine {
             return true; 
         }
         
+        if(this.isSVTonly) {
+            List<ArrayList<Cross>> crosses_svtOnly = new ArrayList<ArrayList<Cross>>();
+            crosses_svtOnly.add(0, crosses.get(0));
+            crosses_svtOnly.add(1, new ArrayList<Cross>());
+            crosses = crosses_svtOnly;
+        } 
         if(this.isCosmic) {
-            if(this.isSVTonly) {
-                List<ArrayList<Cross>> crosses_svtOnly = new ArrayList<ArrayList<Cross>>();
-                crosses_svtOnly.add(0, crosses.get(0));
-                crosses_svtOnly.add(1, new ArrayList<Cross>());
-            } 
             strgtTrksRec.processEvent(event, SVThits, BMThits, SVTclusters, BMTclusters, crosses, SVTGeom, BMTGeom, rbc, shift);
             
         } else {
@@ -224,6 +225,10 @@ public class CVTRecNewKF extends ReconstructionEngine {
      
     @Override
     public boolean init() {
+    	
+    	if(this.getEngineConfiguration() == null || "null".equals(this.getEngineConfiguration())) {
+			return true; //prevents init from being run twice.
+		}
         // Load config
         String rmReg = this.getEngineConfigString("removeRegion");
         
