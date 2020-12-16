@@ -9,22 +9,15 @@ if ( -e "$1.evio" ) then
     exit
 endif
 
-#source /group/clas12/packages/setup.csh
-#module load ccdb
-#module load root
-#module load gemc/4.3.2
-
 set run = 11
 set nEvents = 100
-set gcard = ${GEMC}/../../gcards/clas12-default.gcard
+set gcard = /group/clas12/gemc/5.0/config/clas12-default.gcard 
 
 gemc \
     $gcard \
     -INPUT_GEN_FILE="LUND, $1.txt" \
-    -OUTPUT="evio, $1.evio" \
+    -OUTPUT="hipo, $1.hipo" \
     -RUNNO=$run \
     -USE_GUI=0 \
     -N=$nEvents
-
-gzip $1.evio
 
