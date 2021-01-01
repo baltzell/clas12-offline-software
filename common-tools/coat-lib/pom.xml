@@ -165,6 +165,13 @@
       <version>0.4.4</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.jlab.coda</groupId>
+      <artifactId>jevio</artifactId>
+      <version>6.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
+
 <!--
     <dependency>
       <groupId>cnuphys</groupId>
