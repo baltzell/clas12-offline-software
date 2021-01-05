@@ -11,12 +11,13 @@ public class Hit implements Comparable<Hit> {
     // class implements Comparable interface to allow for sorting a collection of hits by wire number values
 
     // constructor
-    public Hit(int detector, int detectortype, int sector, int layer, Strip strip) {
+    public Hit(int detector, int detectortype, int sector, int layer, Strip strip, float time) {
         this._Detector = detector;                                              // 0 = SVT, 1 = BMT
         this._DetectorType = detectortype;                                      // 0 = C, 1 = Z
         this._Sector = sector;
         this._Layer = layer;
         this._Strip = strip;
+        this._Time = time;
 
     }
 
@@ -46,6 +47,8 @@ public class Hit implements Comparable<Hit> {
     private int _Id;								//		Hit Id
     private int _Status; 							//      Status -1 dead, 0 noisy, 1 good
 
+    private float _Time;
+    
     /**
      *
      * @return the sector (1...24)
@@ -170,6 +173,14 @@ public class Hit implements Comparable<Hit> {
 
     public void set_Status(int _Status) {
         this._Status = _Status;
+    }
+    
+    public void set_Time(float time) {
+    	this._Time = time;
+    }
+    
+    public float get_Time() {
+    	return this._Time;
     }
 
 }

@@ -108,7 +108,7 @@ public class HitReader {
                 BmtStrip.calc_BMTStripParams(geo,(int) bankDGTZ.getByte("sector", i),(int) bankDGTZ.getByte("layer", i)); // for Z detectors the Lorentz angle shifts the strip measurement; calc_Strip corrects for this effect
                 // create the hit object for detector type BMT
                 
-                Hit hit = new Hit(1, this.getZorC((int) bankDGTZ.getByte("layer", i)),(int) bankDGTZ.getByte("sector", i),(int) bankDGTZ.getByte("layer", i), BmtStrip);
+                Hit hit = new Hit(1, this.getZorC((int) bankDGTZ.getByte("layer", i)),(int) bankDGTZ.getByte("sector", i),(int) bankDGTZ.getByte("layer", i), BmtStrip, (float) bankDGTZ.getFloat("time",i));
                 // a place holder to set the status of the hit, for simulated data if the strip number is in range and the Edep is above threshold the hit has status 1, useable
                 hit.set_Status(1);
                 //if(BmtStrip.get_Edep()==0)
@@ -150,6 +150,7 @@ public class HitReader {
         int[] layer = new int[rows];
         int[] strip = new int[rows];
         int[] ADC = new int[rows];
+        float[] time = new float[rows];
 
         if (event.hasBank("BST::adc") == true) {
             //bankDGTZ.show();
@@ -165,6 +166,7 @@ public class HitReader {
                 
                 strip[i] = bankDGTZ.getShort("component", i);
                 ADC[i] = bankDGTZ.getInt("ADC", i);
+                time[i] = bankDGTZ.getFloat("time", i);
                 
                 double angle = 2. * Math.PI * ((double) (sector[i] - 1) / (double) org.jlab.rec.cvt.svt.Constants.NSECT[layer[i] - 1]) + org.jlab.rec.cvt.svt.Constants.PHI0[layer[i] - 1];
                 int hemisphere = (int) Math.signum(Math.sin(angle));
@@ -223,7 +225,7 @@ public class HitReader {
                 SvtStrip.set_StripDir(Dir);
 
                 // create the hit object
-                Hit hit = new Hit(0, -1, sector[i], layer[i], SvtStrip);
+                Hit hit = new Hit(0, -1, sector[i], layer[i], SvtStrip, time[i]);
                 // if the hit is useable in the analysis its status is 1
                 hit.set_Status(1);
                 if (SvtStrip.get_Edep() == 0) {

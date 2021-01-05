@@ -16,7 +16,7 @@ public class FittedHit extends Hit implements Comparable<Hit> {
      * @param Edep (for gemc output without digitization)
      */
     public FittedHit(int detector, int detectortype, int sector, int layer, Strip strip) {
-        super(detector, detectortype, sector, layer, strip);
+        super(detector, detectortype, sector, layer, strip, -1);
 
     }
 

@@ -8,6 +8,7 @@ import org.jlab.geom.prim.Point3D;
 import org.jlab.geom.prim.Vector3D;
 import org.jlab.io.base.DataBank;
 import org.jlab.io.base.DataEvent;
+import org.jlab.rec.cvt.bmt.BMTGeometry;
 import org.jlab.rec.cvt.bmt.BMTType;
 import org.jlab.rec.cvt.cluster.Cluster;
 import org.jlab.rec.cvt.cross.Cross;
@@ -21,26 +22,30 @@ import org.jlab.rec.cvt.trajectory.Ray;
 
 public class RecoBankReader {
 	private List<StraightTrack> _cosmics;
-	private List<Cross> _crosses;
-	private List<Cluster> _clusters;
+	private List<Cross> _SVTcrosses;
+	private List<Cluster> _SVTclusters;
 	private List<FittedHit> _SVTHits;
+	private List<Cross> _BMTcrosses;
+	private List<Cluster> _BMTclusters;
+	private List<FittedHit> _BMThits;
 
 
 
+	
 
 
 
 	public void fetch_SVTCrosses(DataEvent event, double zShift) {
-		if(_clusters == null)
+		if(_SVTclusters == null)
 			fetch_SVTClusters(event);
 
 		if (event.hasBank("BSTRec::Crosses") == false) {
 			//System.err.println("there is no BST bank ");
-			_crosses = new ArrayList<Cross>();
+			_SVTcrosses = new ArrayList<Cross>();
 
 			return;
 		}
-		_crosses = new ArrayList<Cross>();
+		_SVTcrosses = new ArrayList<Cross>();
 		DataBank bank = event.getBank("BSTRec::Crosses");
 
 		for (int j = 0; j < bank.rows(); j++) {
@@ -55,25 +60,109 @@ public class RecoBankReader {
 			cross.set_Dir(new Vector3D(bank.getFloat("ux", j),bank.getFloat("uy", j),bank.getFloat("uz", j)));
 
 			int cluster1id = bank.getShort("Cluster1_ID", j);
-			for (Cluster cluster: _clusters)
+			for (Cluster cluster: _SVTclusters)
 				if (cluster.get_Id() == cluster1id)
 					cross.set_Cluster1(cluster);
 			int cluster2id = bank.getShort("Cluster2_ID", j);
-			for (Cluster cluster: _clusters)
+			for (Cluster cluster: _SVTclusters)
 				if (cluster.get_Id() == cluster2id)
 					cross.set_Cluster2(cluster);
 
-			_crosses.add(cross);
+			_SVTcrosses.add(cross);
 		}
 
 
 
 	}
+	
+	public void fetch_BMTCrosses(DataEvent event, double zShift) {
+		if(_BMTclusters == null)
+			fetch_BMTClusters(event);
+
+		if (event.hasBank("BMTRec::Crosses") == false) {
+			//System.err.println("there is no BST bank ");
+			_BMTcrosses = new ArrayList<Cross>();
+
+			return;
+		}
+		_BMTcrosses = new ArrayList<Cross>();
+		DataBank bank = event.getBank("BMTRec::Crosses");
+
+		for (int j = 0; j < bank.rows(); j++) {
+			int region = bank.getByte("region", j);
+			int sector = bank.getByte("sector", j);
+			int id = bank.getShort("ID",j);
+			Cross cross = new Cross("BMT", BMTType.UNDEFINED, sector, region, id);
+			cross.set_Point(new Point3D(10.*bank.getFloat("x", j), 10.*bank.getFloat("y", j),10.*(bank.getFloat("z", j)-zShift)));
+			cross.set_PointErr(new Point3D(10.*bank.getFloat("err_x", j), 10.*bank.getFloat("err_y", j),10.*bank.getFloat("err_z", j)));
+			cross.set_AssociatedTrackID(bank.getShort("trkID",j));
+			cross.set_Dir(new Vector3D(bank.getFloat("ux", j),bank.getFloat("uy", j),bank.getFloat("uz", j)));
+
+			int cluster1id = bank.getShort("Cluster1_ID", j);
+			for (Cluster cluster: _BMTclusters) {
+				if (cluster.get_Id() == cluster1id) {
+					cross.set_Cluster1(cluster);
+					cross.set_DetectorType(BMTGeometry.getDetectorType(cluster.get_Layer()));
+				}
+			}
+			//int cluster2id = bank.getShort("Cluster2_ID", j);
+			//for (Cluster cluster: _clusters)
+			//	if (cluster.get_Id() == cluster2id)
+			//		cross.set_Cluster2(cluster);
+
+			_BMTcrosses.add(cross);
+		}
+
+	}
+
+	public void fetch_BMTClusters(DataEvent event) {
+		_BMTclusters = new ArrayList<Cluster>();
+		if(_BMThits == null)
+			this.fetch_BMTHits(event);
+		DataBank bank = event.getBank("BMTRec::Clusters");
+
+		for (int i = 0; i < bank.rows(); i++) {
+
+
+			int id = bank.getShort("ID", i);
+			int layer = bank.getByte("layer", i);
+			int sector = bank.getByte("sector", i);
+			Cluster cluster = new Cluster(0, 0, sector, layer, id);
+
+			int size = bank.getInt("size", i);
+			cluster.set_TotalEnergy(bank.getFloat("ETot", i));
+			cluster.set_SeedStrip(bank.getInt("seedStrip", i));
+			cluster.set_Centroid(bank.getFloat("centroid",i));
+			cluster.set_SeedEnergy(bank.getFloat("seedE",i));
+			cluster.set_SeedEnergy(bank.getFloat("seedE",i));
+			cluster.set_CentroidResidual(bank.getFloat("centroidResidual",i));
+			cluster.set_SeedResidual(bank.getFloat("seedResidual",i));
+			cluster.set_AssociatedTrackID(bank.getShort("trkID",i));
+			//Since only up to 5 hits per track are written...
+			for (int j = 0; j < 5; j++) {
+				String hitStrg = "Hit";
+				hitStrg += (j + 1);
+				hitStrg += "_ID";
+				if(!hasColumn(bank,hitStrg))
+					continue;
+				int hitId = bank.getShort(hitStrg, i);
+				for(FittedHit hit : _BMThits) {
+					if (hit.get_Id() == hitId) {
+						cluster.add(hit);
+					}
+				}
+			}
+			_BMTclusters.add(cluster);
+
+		}
+	}
 
 	public void fetch_Cosmics(DataEvent event, org.jlab.rec.cvt.svt.Geometry geo, double zShift) {
 
-		if(_crosses == null)
+		if(_SVTcrosses == null)
 			fetch_SVTCrosses(event, zShift);
+		if(_BMTcrosses == null)
+			fetch_BMTCrosses(event, zShift);
 		if (event.hasBank("CVTRec::Cosmics") == false) {
 			//System.err.println("there is no BST bank ");
 			_cosmics = new ArrayList<StraightTrack>();
@@ -110,7 +199,7 @@ public class RecoBankReader {
 			track.set_ndf(ndfs[i]);
 
 
-			for (int j = 0; j < 18; j++) { 
+			loopCrossId: for (int j = 0; j < 18; j++) { 
 
 				String hitStrg = "Cross";
 				hitStrg += (j + 1);
@@ -118,9 +207,15 @@ public class RecoBankReader {
 				if(!hasColumn(bank,hitStrg))
 					continue;
 				int crossid = bank.getShort(hitStrg, i);
-				for(Cross cross : _crosses) {
+				for(Cross cross : _SVTcrosses) {
 					if(cross.get_Id() == crossid)
 						track.add(cross);
+				}
+				for(Cross cross : _BMTcrosses) {
+					if(cross.get_Id() == crossid) {
+						track.add(cross);
+						continue loopCrossId;
+					}
 				}
 			}
 			_cosmics.add(track);
@@ -132,8 +227,10 @@ public class RecoBankReader {
 	
 	public void fetch_Tracks(DataEvent event, org.jlab.rec.cvt.svt.Geometry geo, double zShift) {
 
-		if(_crosses == null)
+		if(_SVTcrosses == null)
 			fetch_SVTCrosses(event, zShift);
+		if(_BMTcrosses == null)
+			fetch_BMTCrosses(event, zShift);
 		if (event.hasBank("CVTRec::Tracks") == false) {
 			//System.err.println("there is no BST bank ");
 			_tracks = new ArrayList<Track>();
@@ -180,7 +277,7 @@ public class RecoBankReader {
 			//there are other entries that should be read.  add these later.  
 
 
-			for (int j = 0; j < 18; j++) { 
+			loopCrossId: for (int j = 0; j < 18; j++) { 
 
 				String hitStrg = "Cross";
 				hitStrg += (j + 1);
@@ -188,9 +285,15 @@ public class RecoBankReader {
 				if(!hasColumn(bank,hitStrg))
 					continue;
 				int crossid = bank.getShort(hitStrg, i);
-				for(Cross cross : _crosses) {
+				for(Cross cross : _SVTcrosses) {
 					if(cross.get_Id() == crossid)
 						track.add(cross);
+				}
+				for(Cross cross : _BMTcrosses) {
+					if(cross.get_Id() == crossid) {
+						track.add(cross);
+						break loopCrossId;
+					}
 				}
 			}
 			_tracks.add(track);
@@ -201,7 +304,7 @@ public class RecoBankReader {
 	
 	
 
-	private boolean hasColumn(DataBank bank, String name) {
+	public boolean hasColumn(DataBank bank, String name) {
 		for(String n : bank.getColumnList()) {
 			if (name.equalsIgnoreCase(n))
 				return true;
@@ -210,7 +313,7 @@ public class RecoBankReader {
 	}
 
 	public void fetch_SVTClusters(DataEvent event) {
-		_clusters = new ArrayList<Cluster>();
+		_SVTclusters = new ArrayList<Cluster>();
 		if(_SVTHits == null)
 			this.fetch_SVTHits(event);
 		DataBank bank = event.getBank("BSTRec::Clusters");
@@ -247,7 +350,7 @@ public class RecoBankReader {
 					}
 				}
 			}
-			_clusters.add(cluster);
+			_SVTclusters.add(cluster);
 
 		}
 
@@ -276,6 +379,27 @@ public class RecoBankReader {
 		//bank.show();
 	}
 
+	public void fetch_BMTHits(DataEvent event) {
+		DataBank bank = event.getBank("BSTRec::Hits");
+
+		_BMThits = new ArrayList<FittedHit>();
+		for (int i = 0; i < bank.rows(); i++) {
+			int layer = bank.getByte("layer", i);
+			int sector = bank.getByte("sector", i);
+			int strip = bank.getInt("strip", i);
+			int id = bank.getShort("ID", i);
+			FittedHit hit = new FittedHit(0, 0, sector, layer, new Strip(strip, 0));
+
+			hit.set_Id(id);
+			hit.set_docaToTrk(bank.getFloat("fitResidual", i));
+			hit.set_TrkgStatus(bank.getInt("trkingStat", i));
+
+			hit.set_AssociatedClusterID(bank.getShort("clusterID", i));
+			hit.set_AssociatedTrackID(bank.getShort("trkID", i));
+			_BMThits.add(hit);
+		}
+		//bank.show();
+	}
 
 	public List<StraightTrack> get_Cosmics() {
 		return _cosmics;
@@ -285,5 +409,20 @@ public class RecoBankReader {
 		return _tracks;
 	}
 
+	public List<Cluster> get_ClustersSVT() {
+		return _SVTclusters;
+	}
+	
+	public List<Cluster> get_ClustersBMT() {
+		return _BMTclusters;
+	}
+
+	public List<Cross> get_CrossesSVT() {
+		return _SVTcrosses;
+	}
+	
+	public List<Cross> get_CrossesBMT() {
+		return _BMTcrosses;
+	}
 
 }	

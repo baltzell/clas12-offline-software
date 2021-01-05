@@ -37,6 +37,11 @@ import org.jlab.rec.cvt.hit.Hit;
  */
 public class CVTRecNewKF extends ReconstructionEngine {
 
+	double minHitTimeBMT = Double.NEGATIVE_INFINITY;
+	double maxHitTimeBMT = Double.POSITIVE_INFINITY;
+	double minHitTimeSVT = Double.NEGATIVE_INFINITY;
+	double maxHitTimeSVT = Double.POSITIVE_INFINITY;
+	
     org.jlab.rec.cvt.svt.Geometry SVTGeom;
     org.jlab.rec.cvt.bmt.BMTGeometry BMTGeom;
     CTOFGeant4Factory CTOFGeom;
@@ -151,17 +156,23 @@ public class CVTRecNewKF extends ReconstructionEngine {
         if(svt_hits.size()>org.jlab.rec.cvt.svt.Constants.MAXSVTHITS)
             return true;
         if (svt_hits != null && svt_hits.size() > 0) {
+        	svt_hits.removeIf(hit->{
+            	return hit.get_Time()>maxHitTimeSVT || hit.get_Time()<minHitTimeSVT;
+            });
             hits.addAll(svt_hits);
         }
-
+        
         List<Hit> bmt_hits = hitRead.get_BMTHits();
         if (bmt_hits != null && bmt_hits.size() > 0) {
             hits.addAll(bmt_hits);
-
+            bmt_hits.removeIf(hit->{
+            	return hit.get_Time()>maxHitTimeBMT || hit.get_Time()<minHitTimeBMT;
+            });
             if(bmt_hits.size()>org.jlab.rec.cvt.bmt.Constants.MAXBMTHITS)
                  return true;
         }
-
+        
+		
         //II) process the hits		
         List<FittedHit> SVThits = new ArrayList<FittedHit>();
         List<FittedHit> BMThits = new ArrayList<FittedHit>();
@@ -280,6 +291,22 @@ public class CVTRecNewKF extends ReconstructionEngine {
         if (svtCosmics==null) {
              System.out.println("["+this.getName()+"] run with cosmics settings default = false");
         }
+        
+        String minTimeBMT = this.getEngineConfigString("minHitTimeBMT");
+        if(minTimeBMT != null)
+        	this.minHitTimeBMT = Double.parseDouble(minTimeBMT);
+        String maxTimeBMT = this.getEngineConfigString("maxHitTimeBMT");
+        if(maxTimeBMT != null)
+        	this.maxHitTimeBMT = Double.parseDouble(maxTimeBMT);
+        String minTimeSVT = this.getEngineConfigString("minHitTimeSVT");
+        if(minTimeSVT != null)
+        	this.minHitTimeSVT = Double.parseDouble(minTimeSVT);
+        String maxTimeSVT = this.getEngineConfigString("maxHitTimeSVT");
+        if(maxTimeSVT != null)
+        	this.maxHitTimeSVT = Double.parseDouble(maxTimeSVT);
+        System.out.println("["+this.getName()+"] hit time cuts:  \n BMT: " +minHitTimeBMT + " - "+ maxHitTimeBMT + 
+        		";   SVT: " +minHitTimeSVT + " - "+ maxHitTimeSVT);
+        
         // Load other geometries
         
         variationName = Optional.ofNullable(this.getEngineConfigString("variation")).orElse("default");
