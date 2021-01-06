@@ -13,6 +13,7 @@ import cnuphys.rk4.IRkListener;
 import cnuphys.rk4.IStopper;
 import cnuphys.rk4.RungeKutta;
 import cnuphys.rk4.RungeKuttaException;
+import cnuphys.swim.util.Line;
 
 import cnuphys.swim.util.Plane;
 /**
@@ -488,6 +489,241 @@ public final class Swimmer {
 			finalPathLength = stopper.getFinalT();
 
 			rholast = Math.hypot(result.getUf()[0], result.getUf()[1]);
+			del = Math.abs(rholast - fixedRho);
+			count++;
+			stepSize = stepSize / 2;
+		} // while
+
+		result.setNStep(ns);
+		result.setFinalS(finalPathLength);
+	}
+
+	/**
+	 * Swims a particle with a built it stopper for the rho coordinate with respect to a line.
+	 * This does NOT cach the steps, so the result contains only the stopping point.
+	 * along the path. Uses an adaptive stepsize algorithm.
+	 * 
+	 * @param charge       the charge: -1 for electron, 1 for proton, etc
+	 * @param xo           the x vertex position in meters
+	 * @param yo           the y vertex position in meters
+	 * @param zo           the z vertex position in meters
+	 * @param momentum     initial momentum in GeV/c
+	 * @param theta        initial polar angle in degrees
+	 * @param phi          initial azimuthal angle in degrees
+	 * @param fixedRho     the fixed rho value (meters) that terminates (or
+	 *                     maxPathLength if reached first)
+	 * @param cx           the x coordinate in meters of a point on the line
+	 * @param cy           the y coordinate in meters of a point on the line
+	 * @param cz           the z coordinate in meters of a point on the line
+	 * @param ux           the x component of the line vector
+	 * @param uy           the y component of the line vector
+	 * @param uz           the z component of the line vector
+	 * @param accuracy     the accuracy of the fixed z termination, in meters
+	 * @param sMax         Max path length in meters. This determines the max number
+	 *                     of steps based on the step size. If a stopper is used,
+	 *                     the integration might terminate before all the steps are
+	 *                     taken. A reasonable value for CLAS is 8. meters
+	 * @param stepSize     the initial step size in meters.
+	 * @param relTolerance the error tolerance as fractional diffs. Note it is a
+	 *                     vector, the same dimension of the problem, e.g., 6 for
+	 *                     [x,y,z,vx,vy,vz]. It might be something like {1.0e-10,
+	 *                     1.0e-10, 1.0e-10, 1.0e-8, 1.0e-8, 1.0e-8}
+	 * @param result upon return, results from the swim including the final state vector [x, y, z, px/p, py/p, pz/p]
+	 * @throws RungeKuttaException
+	 */
+	public void swimRho(int charge, double xo, double yo, double zo, double momentum, double theta, double phi,
+			final double fixedRho, double cx, double cy, double cz, double ux, double uy, double uz,
+                        double accuracy, double sMax, double stepSize, double relTolerance[], SwimResult result)
+			throws RungeKuttaException {
+		// normally we swim from small rho to a larger rho cutoff.
+		// but we can handle either
+
+		Line axis = new Line(cx, cy, cz, ux, uy, uz);
+		
+		double rho0 = axis.distanceToLine(xo, yo, zo);
+		// set u to the starting state vector
+		double thetaRad = Math.toRadians(theta);
+		double phiRad = Math.toRadians(phi);
+		double sinTheta = Math.sin(thetaRad);
+
+		result.getUf()[0] = xo;
+		result.getUf()[1] = yo;
+		result.getUf()[2] = zo;
+		result.getUf()[3] = sinTheta*Math.cos(phiRad); //px/p
+		result.getUf()[4] = sinTheta*Math.sin(phiRad); //py/p
+		result.getUf()[5] = Math.cos(thetaRad); //pz/p
+                
+                DefaultRhoAxisStopper stopper = new DefaultRhoAxisStopper(result.getUf(), 0, sMax, rho0, fixedRho, axis, accuracy);
+
+		if (momentum < MINMOMENTUM) {
+			System.err.println("Skipping low momentum fixed rho swim (A)");
+			result.setNStep(0);
+			result.setFinalS(0);
+			return;
+		}
+		
+		// First try
+		
+		int ns = swim(charge, xo, yo, zo, momentum, theta, phi, stopper, null, sMax, stepSize, relTolerance, null);
+		System.arraycopy(stopper.getFinalU(), 0, result.getUf(), 0, result.getUf().length);
+		
+		// if we stopped because of max pathlength, we are done (never reached
+		// target rho)
+		double finalPathLength = stopper.getFinalT();
+		if (finalPathLength > sMax) {
+			result.setNStep(ns);
+			result.setFinalS(finalPathLength);
+			return;
+		}
+
+		// are we there yet?
+		double rholast = axis.distanceToLine(result.getUf()[0], result.getUf()[1], result.getUf()[2]);
+		double del = Math.abs(rholast - fixedRho);
+		int maxtry = 10;
+		int count = 0;
+
+		// set the step size to half the accuracy
+		stepSize = accuracy / 2;
+
+
+		while ((count < maxtry) && (del > accuracy)) {
+			xo = result.getUf()[0];
+			yo = result.getUf()[1];
+			zo = result.getUf()[2];
+			double px = result.getUf()[3];
+			double py = result.getUf()[4];
+			double pz = result.getUf()[5];
+			double rhoCurr = axis.distanceToLine(xo, yo, zo);
+
+			stopper = new DefaultRhoAxisStopper(result.getUf(), finalPathLength, sMax, rhoCurr, fixedRho, axis, accuracy);
+
+			theta = FastMath.acos2Deg(pz);
+			phi = FastMath.atan2Deg(py, px);
+			
+			ns += swim(charge, xo, yo, zo, momentum, theta, phi, stopper, null, sMax, stepSize, relTolerance, null);
+
+			System.arraycopy(stopper.getFinalU(), 0, result.getUf(), 0, result.getUf().length);
+			
+			finalPathLength = stopper.getFinalT();
+
+			rholast = axis.distanceToLine(result.getUf()[0], result.getUf()[1], result.getUf()[2]);
+			del = Math.abs(rholast - fixedRho);
+			count++;
+			stepSize /= 2;
+		} // while
+
+		result.setNStep(ns);
+		result.setFinalS(finalPathLength);
+	}
+
+	/**
+	 * Swims a particle with a built it stopper for the rho coordinate.This does NOT cach the steps, so the result contains only the stopping point.
+	 * along the path. Uses a fixed stepsize algorithm.
+	 * 
+	 * @param charge               the charge: -1 for electron, 1 for proton, etc
+	 * @param xo                   the x vertex position in meters
+	 * @param yo                   the y vertex position in meters
+	 * @param zo                   the z vertex position in meters
+	 * @param momentum             initial momentum in GeV/c
+	 * @param theta                initial polar angle in degrees
+	 * @param phi                  initial azimuthal angle in degrees
+	 * @param fixedRho             the fixed rho value (meters) that terminates (or
+	 *                             maxPathLength if reached first)
+	 * @param cx                   the x coordinate in meters of a point on the line
+	 * @param cy                   the y coordinate in meters of a point on the line
+	 * @param cz                   the z coordinate in meters of a point on the line
+	 * @param ux                   the x component of the line vector
+	 * @param uy                   the y component of the line vector
+	 * @param uz                   the z component of the line vector
+	 * @param accuracy             the accuracy of the fixed z termination, in
+	 *                             meters
+	 * @param sMax                 in meters. This determines the max number of
+	 *                             steps based on the step size. If a stopper is
+	 *                             used, the integration might terminate before all
+	 *                             the steps are taken. A reasonable value for CLAS
+	 *                             is 8. meters
+	 * @param stepSize             the uniform step size in meters.
+	 * @param result upon return, results from the swim including the final state vector [x, y, z, px/p, py/p, pz/p]
+	 */
+	public void swimRho(int charge, double xo, double yo, double zo, double momentum, double theta, double phi,
+			final double fixedRho, double cx, double cy, double cz, double ux, double uy, double uz, 
+                        final double accuracy, double sMax, double stepSize, SwimResult result) {
+
+		// normally we swim from small rho to a larger rho cutoff.
+		// but we can handle either
+		
+		Line axis = new Line(cx, cy, cz, ux, uy, uz);
+		
+		double rho0 = axis.distanceToLine(xo, yo, zo);
+		
+		//set u to the starting state vector
+		double thetaRad = Math.toRadians(theta);
+		double phiRad = Math.toRadians(phi);
+		double sinTheta = Math.sin(thetaRad);
+		
+		result.getUf()[0] = xo;
+		result.getUf()[1] = yo;
+		result.getUf()[2] = zo;
+		result.getUf()[3] = sinTheta*Math.cos(phiRad); //px/p
+		result.getUf()[4] = sinTheta*Math.sin(phiRad); //py/p
+		result.getUf()[5] = Math.cos(thetaRad); //pz/p
+
+		
+		DefaultRhoAxisStopper stopper = new DefaultRhoAxisStopper(result.getUf(), 0, sMax, rho0, fixedRho, axis, accuracy);
+
+
+		if (momentum < MINMOMENTUM) {
+			System.err.println("Skipping low momentum fixed rho swim (B)");
+			result.setNStep(0);
+			result.setFinalS(0);
+			return;
+		}
+
+		// our first attempt
+		int ns = swim(charge, xo, yo, zo, momentum, theta, phi, stopper, null, sMax, stepSize);
+		System.arraycopy(stopper.getFinalU(), 0, result.getUf(), 0, result.getUf().length);
+		
+		// if we stopped because of max pathlength, we are done (never reached
+		// target rho)
+		double finalPathLength = stopper.getFinalT();
+		
+		if (finalPathLength > sMax) {
+			result.setNStep(ns);
+			result.setFinalS(finalPathLength);
+			return;
+		}
+
+		// are we there yet?
+		double rholast = axis.distanceToLine(result.getUf()[0], result.getUf()[1], result.getUf()[2]);
+		double del = Math.abs(rholast - fixedRho);
+		int maxtry = 10;
+		int count = 0;
+
+		// reduce the step size
+		stepSize = stepSize / 2;
+
+		while ((count < maxtry) && (del > accuracy)) {
+			xo = result.getUf()[0];
+			yo = result.getUf()[1];
+			zo = result.getUf()[2];
+			double px = result.getUf()[3];
+			double py = result.getUf()[4];
+			double pz = result.getUf()[5];
+			double rhoCurr = axis.distanceToLine(xo, yo, zo);
+
+			stopper = new DefaultRhoAxisStopper(result.getUf(), finalPathLength, sMax, rhoCurr, fixedRho, axis, accuracy);
+
+			theta = FastMath.acos2Deg(pz);
+			phi = FastMath.atan2Deg(py, px);
+
+			ns += swim(charge, xo, yo, zo, momentum, theta, phi, stopper, null, sMax, stepSize);
+			
+			System.arraycopy(stopper.getFinalU(), 0, result.getUf(), 0, result.getUf().length);
+			
+
+			finalPathLength = stopper.getFinalT();
+
+			rholast = axis.distanceToLine(result.getUf()[0], result.getUf()[1], result.getUf()[2]);
 			del = Math.abs(rholast - fixedRho);
 			count++;
 			stepSize = stepSize / 2;

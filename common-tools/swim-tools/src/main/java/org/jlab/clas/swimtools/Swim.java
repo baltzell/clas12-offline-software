@@ -507,6 +507,49 @@ public class Swim {
 
     }
 
+    /**
+     * 
+     * @param radius  cylinder radius
+     * @param cx      cylinder center x component
+     * @param cy      cylinder center y component
+     * @param cz      cylinder center z component
+     * @param ux      cylinder axis x component
+     * @param uy      cylinder axis y component
+     * @param uz      cylinder axis z component
+     * @return state  x,y,z,px,py,pz, pathlength, iBdl at the surface 
+     */
+    public double[] SwimRho(double radius, double cx, double cy, double cz, double ux, double  uy,  double uz)  {
+
+        double[] value = new double[8];
+
+        // using adaptive stepsize
+        if(this.SwimUnPhys)
+            return null;
+
+        try {
+        
+            SwimResult result = new SwimResult(6);
+            
+            PC.CF.swimRho(_charge, _x0, _y0, _z0, _pTot, _theta, _phi, radius/100, cx/100, cy/100, cz/100, ux, uy, uz,
+                          accuracy*2, _rMax, stepSize*10, cnuphys.swim.Swimmer.CLAS_Tolerance, result);
+
+            value[0] = result.getUf()[0] * 100; // convert back to cm
+            value[1] = result.getUf()[1] * 100; // convert back to cm
+            value[2] = result.getUf()[2] * 100; // convert back to cm
+            value[3] = result.getUf()[3] * _pTot; // normalized values
+            value[4] = result.getUf()[4] * _pTot;
+            value[5] = result.getUf()[5] * _pTot;
+            value[6] = result.getFinalS() * 100;
+            value[7] = 0; // Conversion from kG.m to T.cm
+
+                    
+        } catch (RungeKuttaException e) {
+                e.printStackTrace();
+        }
+        return value;
+
+    }
+
     private class SphericalBoundarySwimStopper implements IStopper {
 
         private double _finalPathLength = Double.NaN;
