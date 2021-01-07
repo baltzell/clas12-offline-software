@@ -960,7 +960,7 @@ public class TruthMatch extends ReconstructionEngine {
         Map< Short, List<RecHit>> recHits = new HashMap<>();
 
         /**
-         * Check if three necessary banks exist otherwise will return null
+         * Check if necessary banks exist otherwise will return null
          */
         if (event.hasBank("DC::tdc") == false) {
             return null;
@@ -998,16 +998,28 @@ public class TruthMatch extends ReconstructionEngine {
                 curHit.pindex = -1;
             }
 
-            mcp.get((short) mchitsInDC.get(curHit.id).otid).MCLayersTrk |= 1L << layerBit;
+            /**
+             * These two instances where it is checked "if (mchitsInDC !=
+             * null)", at this moment is expected to be temporary It is
+             * unxpected how it can happen mchitsInDC to be null, and the
+             * DC::tdc bank non-empty As soon this will be understood the code
+             * will be changed accordingly
+             */
+            if (mchitsInDC != null) {
+                mcp.get((short) mchitsInDC.get(curHit.id).otid).MCLayersTrk |= 1L << layerBit;
+                System.out.println("****************    mchitsInDC is empty ");
+            }
             if (curHit.pindex >= 0) {
 
-                if (!mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.containsKey((int) curHit.pindex)) {
-                    mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.put((int) curHit.pindex, 0L);
-                }
+                if (mchitsInDC != null) {
+                    if (!mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.containsKey((int) curHit.pindex)) {
+                        mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.put((int) curHit.pindex, 0L);
+                    }
 
-                Long tmp = mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.get((int) curHit.pindex);
-                tmp |= 1L << layerBit;
-                mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.put((int) curHit.pindex, tmp);
+                    Long tmp = mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.get((int) curHit.pindex);
+                    tmp |= 1L << layerBit;
+                    mcp.get((short) mchitsInDC.get(curHit.id).otid).RecLayersTrk.put((int) curHit.pindex, tmp);
+                }
 
                 //recp.get(curHit.pindex).RecLayersTrk |= 1L << layerBit;
             }
@@ -1312,6 +1324,14 @@ public class TruthMatch extends ReconstructionEngine {
             return;
         }
 
+                /**
+                 * Because of the issue related to DC some weird cases happen.
+                 * mchits should should not be null
+                 */
+                if (mchits == null ) {
+                    return;
+                }
+                
         for (RecCluster cl : cls) {
 
             /**
