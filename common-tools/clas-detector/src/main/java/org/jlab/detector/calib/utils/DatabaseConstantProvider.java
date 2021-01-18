@@ -17,74 +17,52 @@ import org.jlab.ccdb.CcdbPackage;
 import javax.swing.JFrame;
 import org.jlab.ccdb.Assignment;
 
-import org.jlab.ccdb.Directory;
-import org.jlab.ccdb.JDBCProvider;
-import org.jlab.ccdb.TypeTable;
 import org.jlab.ccdb.TypeTableColumn;
 import org.rcdb.RCDB;
 import org.jlab.geom.base.ConstantProvider;
 import org.jlab.utils.groups.IndexedTable;
 import org.jlab.utils.groups.IndexedTableViewer;
 
-
-
 /**
  *
  * @author gavalian
+ * @author baltzell
  */
 public class DatabaseConstantProvider implements ConstantProvider {
     
-    private HashMap<String,String[]> constantContainer = new HashMap<String,String[]>();
-    private boolean PRINT_ALL = true;
-    private String variation  = "default";
+    private final HashMap<String,String[]> constantContainer = new HashMap<String,String[]>();
+    private final boolean PRINT_ALL = true;
+    private final int DEBUG_LEVEL = 1;
+    private String variation = "default";
     private Integer runNumber = 10;
-    private Integer loadTimeErrors = 0;
-    private Boolean PRINTOUT_FLAG  = false;
-    private Integer dataYear       = 118;
-    private Integer dataMonth      = 1;
-    private Date    databaseDate   = new Date();
-  
+    private Date databaseDate = new Date();
     public static final int DEFAULT_INDICES = 3;
-    public static final String[] indexNamesDet = new String[]{"sector","layer","component","order"};
-    public static final String[] indexNamesDaq = new String[]{"crate","slot","channel"};
+    public List<List<String>> autoDetectedIndexNames;
     
     private org.jlab.ccdb.JDBCProvider provider;
     
-    private int          debugMode = 1;
-    
     public DatabaseConstantProvider(){
-        this.loadTimeErrors = 0;
         this.runNumber = 10;
         this.variation = "default";
-        
         String address = "mysql://clas12reader@clasdb.jlab.org/clas12";
-        
         String envAddress = this.getEnvironment();        
         if(envAddress!=null) address = envAddress;
         this.initialize(address);
     }
     
     public DatabaseConstantProvider(int run, String var){
-        
-        this.loadTimeErrors = 0;
         this.runNumber = run;
         this.variation = var;
-        
         String address = "mysql://clas12reader@clasdb.jlab.org/clas12";
-        
         String envAddress = this.getEnvironment();        
         if(envAddress!=null) address = envAddress;
         this.initialize(address);
     }
     
     public DatabaseConstantProvider(int run, String var, String timestamp){
-        
-        this.loadTimeErrors = 0;
         this.runNumber = run;
         this.variation = var;
-        
         String address = "mysql://clas12reader@clasdb.jlab.org/clas12";
-        
         String envAddress = this.getEnvironment();        
         if(envAddress!=null) address = envAddress;
         if(timestamp.length()>8){
@@ -101,8 +79,6 @@ public class DatabaseConstantProvider implements ConstantProvider {
         this.variation = var;
         this.initialize(address);
     }
-    
-    public void setPrintout(Boolean flag){ this.PRINTOUT_FLAG = flag;}
     
     public Set<String> getEntrySet(){
         Set<String> entries = new HashSet<String>();
@@ -124,8 +100,6 @@ public class DatabaseConstantProvider implements ConstantProvider {
         
         String propCLAS12 = System.getProperty("CLAS12DIR");
         String propCCDB   = System.getProperty("CCDB_DATABASE");
-        
-        //System.out.println("ENVIRONMENT : " + envCLAS12 + " " + envCCDB + " " + propCLAS12 + " " + propCCDB);
         
         if(envCCDB!=null&&envCLAS12!=null){
             StringBuilder str = new StringBuilder();
@@ -156,7 +130,7 @@ public class DatabaseConstantProvider implements ConstantProvider {
     
     private void initialize(String address){
         provider = CcdbPackage.createProvider(address);
-        if(debugMode>0){
+        if(DEBUG_LEVEL>0){
             System.out.println("[DB] --->  open connection with : " + address);
             System.out.println("[DB] --->  database variation   : " + this.variation);
             System.out.println("[DB] --->  database run number  : " + this.runNumber);
@@ -166,7 +140,7 @@ public class DatabaseConstantProvider implements ConstantProvider {
         provider.connect();
         
         if(provider.isConnected()==true){
-            if(debugMode>0) System.out.println("[DB] --->  database connection  : success");
+            if(DEBUG_LEVEL>0) System.out.println("[DB] --->  database connection  : success");
         } else {
             System.out.println("[DB] --->  database connection  : failed");
         }
@@ -175,17 +149,19 @@ public class DatabaseConstantProvider implements ConstantProvider {
         provider.setDefaultDate(databaseDate);
         provider.setDefaultRun(this.runNumber);
 
-        //Directory dir = provider.getDirectory("/calibration/ftof/");        
-        //Assignment asgmt = provider.getData("/test/test_vars/test_table");
+        // initialize the stock options, for auto-detection of #indices:
+        autoDetectedIndexNames = new ArrayList<>();
+        autoDetectedIndexNames.add(Arrays.asList(new String[]{"sector","layer","component","order"}));
+        autoDetectedIndexNames.add(Arrays.asList(new String[]{"sector","layer","component"}));
+        autoDetectedIndexNames.add(Arrays.asList(new String[]{"crate","slot","channel"}));
     }
     
     public final void setTimeStamp(String timestamp){
         String pattern = "MM/dd/yyyy-HH:mm:ss";
-	if(timestamp.contains("-")==false){
-	    pattern = "MM/dd/yyyy";
-	}
+        if(timestamp.contains("-")==false){
+            pattern = "MM/dd/yyyy";
+        }
         SimpleDateFormat format = new SimpleDateFormat(pattern);
-        
         try {
             databaseDate = format.parse(timestamp);
         } catch (ParseException ex) {
@@ -194,30 +170,85 @@ public class DatabaseConstantProvider implements ConstantProvider {
             System.out.println(" ***** TIMESTAMP WARNING ***** setting date to : " + databaseDate);
 
         }
-        
     }
+
     /**
-     * Reads calibration constants for given table in the database.
+     * Check for an exact match of leading column names and integer type.
+     * @param names expected names of leading index columns
+     * @param ttc table to check
+     * @return whether the table is consistent with the expected index names
+     */
+    public static boolean checkIndices(List<String> names, Vector<TypeTableColumn> ttc) {
+        if (ttc.size() < names.size()) {
+            return false;
+        }
+        for (int loop = 0; loop < names.size(); loop++) {
+            if (ttc.get(loop).getCellType().name().compareTo("INTEGER") != 0) {
+                return false;
+            }
+            if (!ttc.get(loop).getName().equals(names.get(loop))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /**
+     * Get the size of the first standard, matching index names
+     * @param ttc
+     * @return 
+     */
+    private int autoDetectIndexCount(Vector<TypeTableColumn> ttc) {
+        for (List<String> names : autoDetectedIndexNames) {
+            if (checkIndices(names, ttc)) {
+                return names.size();
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Reads calibration constants for given table in the database.  Tries to
+     * auto-detect number of indices, else falls back to default 3.
      * @param table_name
      * @return 
      */
-    public CalibrationConstants  readConstants(String table_name){
+    public CalibrationConstants readConstants(String table_name) {
+        return readConstants(table_name, -1);
+    }
+
+    /**
+     * Reads calibration constants for given table in the database.  If nindex
+     * is invalid (less than one), tries to auto-detect number of indices, else
+     * falls back to default 3.
+     * @param table_name
+     * @return 
+     */
+    public CalibrationConstants readConstants(String table_name, int nindex) {
 
         Assignment asgmt = provider.getData(table_name);
         int ncolumns = asgmt.getColumnCount();
         Vector<TypeTableColumn> typecolumn = asgmt.getTypeTable().getColumns();
-        String[] format = new String[ncolumns-3];
 
-        for(int loop = 3; loop < ncolumns; loop++){
+        if (nindex<0) {
+            nindex = autoDetectIndexCount(typecolumn);
+        }
+        if (nindex<0) {
+            nindex = DEFAULT_INDICES;
+        }
+
+        String[] format = new String[ncolumns-nindex];
+
+        for(int loop = nindex; loop < ncolumns; loop++){
             if(typecolumn.get(loop).getCellType().name().compareTo("DOUBLE")==0){
-                format[loop-3] = typecolumn.get(loop).getName() + "/D";
+                format[loop-nindex] = typecolumn.get(loop).getName() + "/D";
             } else {
-                format[loop-3] = typecolumn.get(loop).getName() + "/I";
+                format[loop-nindex] = typecolumn.get(loop).getName() + "/I";
             }
         }
 
-        CalibrationConstants  table = new CalibrationConstants(3,format);
-        for(int i = 0; i < 3; i++){
+        CalibrationConstants  table = new CalibrationConstants(nindex,format);
+        for(int i = 0; i < nindex; i++){
             table.setIndexName(i, typecolumn.get(i).getName());
         }
         table.show();
@@ -242,52 +273,30 @@ public class DatabaseConstantProvider implements ConstantProvider {
     }
  
     /**
-     * Check for an exact match of column names and integer type.
-     * @param names
-     * @param ttc
+     * Tries auto-detecting number of indices, else falls back to default 3.
+     * @param table_name
      * @return 
      */
-    public static int countIndices(String[] names, Vector<TypeTableColumn> ttc) {
-        int ret = 0;        
-        for (int loop = 0; loop < names.length && loop<ttc.size(); loop++) {
-            if (ttc.get(loop).getCellType().name().compareTo("INTEGER")!=0) {
-                break;
-            }
-            if (!ttc.get(loop).getName().equals(indexNamesDet[loop])) {
-                break;
-            }
-            ret++;
-        }
-        return ret;
-    }
-    
-    /**
-     * Check whether it matches the standard index names.
-     * @param ttc
-     * @return 
-     */
-    public static int countIndices(Vector<TypeTableColumn> ttc) {
-        if (countIndices(indexNamesDet,ttc) > 0) {
-            return countIndices(indexNamesDet,ttc);
-        }
-        if (countIndices(indexNamesDaq,ttc) > 0) {
-            return countIndices(indexNamesDaq,ttc);
-        }
-        return -1;
-    }
-
-    public IndexedTable  readTable(String table_name){
+    public IndexedTable readTable(String table_name){
         return this.readTable(table_name, -1);
     }
 
-    public IndexedTable  readTable(String table_name,int nindex){
+    /**
+     * If nindex is invalid (less than one), tries to auto-detect number of
+     * indices, else falls back to default 3.
+     * large 
+     * @param table_name
+     * @param nindex
+     * @return 
+     */
+    public IndexedTable readTable(String table_name,int nindex){
 
         Assignment asgmt = provider.getData(table_name);
         int ncolumns = asgmt.getColumnCount();
         Vector<TypeTableColumn> typecolumn = asgmt.getTypeTable().getColumns();
 
         if (nindex<0) {
-            nindex = countIndices(typecolumn);
+            nindex = autoDetectIndexCount(typecolumn);
         }
         if (nindex<0) {
             nindex = DEFAULT_INDICES;
@@ -331,42 +340,26 @@ public class DatabaseConstantProvider implements ConstantProvider {
     public void loadTable(String table_name){
         try {
             Assignment asgmt = provider.getData(table_name);
-            
             int ncolumns = asgmt.getColumnCount();
-            TypeTable  table = asgmt.getTypeTable();
             Vector<TypeTableColumn> typecolumn = asgmt.getTypeTable().getColumns();
             System.out.println("[DB LOAD] ---> loading data table : " + table_name);
             System.out.println("[DB LOAD] ---> number of columns  : " + typecolumn.size());
             System.out.println();
             for(int loop = 0; loop < ncolumns; loop++){
-                //System.out.println("Reading column number " + loop 
-                //+ "  " + typecolumn.elementAt(loop).getCellType()
-                //+ "  " + typecolumn.elementAt(loop).getName());
                 String name = typecolumn.get(loop).getName();
                 Vector<String> row = asgmt.getColumnValuesString(name);
                 String[] values = new String[row.size()];
                 for(int el = 0; el < row.size(); el++){
                     values[el] = row.elementAt(el);
-                    //for(String cell: row){
-                    //System.out.print(cell + " ");
                 }
                 StringBuilder str = new StringBuilder();
                 str.append(table_name);
                 str.append("/");
                 str.append(typecolumn.elementAt(loop).getName());
                 constantContainer.put(str.toString(), values);
-                //System.out.println(); //next line after a row
             }
-            //provider.close();
         } catch (Exception e){
             System.out.println("[DB LOAD] --->  error loading table : " + table_name);
-            this.loadTimeErrors++;
-        }
-    }
-    
-    public void loadTables(String... tbl){
-        for(String table : tbl){
-            
         }
     }
     
@@ -405,6 +398,7 @@ public class DatabaseConstantProvider implements ConstantProvider {
         System.out.println("[DB] --->  database disconnect  : success");
         this.provider.close();
     }
+
     /**
      * prints out table with loaded values.
      */
@@ -419,6 +413,7 @@ public class DatabaseConstantProvider implements ConstantProvider {
         System.out.println("\t" + StringTable.getCharacterString("*", 70));
         */
     }
+
     /**
      * returns a string representing a table printout of the constants
      * 
@@ -452,16 +447,15 @@ public class DatabaseConstantProvider implements ConstantProvider {
         }
         return str.toString();
     }
-    
-    
+
     public void clear(){
         this.constantContainer.clear();
     }
-    
+
     public int getSize(){
         return this.constantContainer.size();
     }
-    
+
     public int getSize(String name){
         if(this.hasConstant(name)==true){
             String[] array = this.constantContainer.get(name);
@@ -469,28 +463,22 @@ public class DatabaseConstantProvider implements ConstantProvider {
         }
         return 0;
     }
-    
-    
 
     public static void main(String[] args){
-        
-        
-        
-            DatabaseConstantProvider provider = new DatabaseConstantProvider(10,"default");
-            IndexedTable table = provider.readTable("/test/fc/fadc");
-            
-            provider.disconnect();
-            JFrame frame = new JFrame();
-            frame.setSize(600, 600);
-            
-            
-            IndexedTableViewer canvas = new IndexedTableViewer(table);
-            frame.add(canvas);
-            frame.pack();
-            frame.setVisible(true);
-            table.show();
-         
-         
+
+        DatabaseConstantProvider provider = new DatabaseConstantProvider(10,"default");
+        IndexedTable table = provider.readTable("/test/fc/fadc");
+
+        provider.disconnect();
+        JFrame frame = new JFrame();
+        frame.setSize(600, 600);
+
+        IndexedTableViewer canvas = new IndexedTableViewer(table);
+        frame.add(canvas);
+        frame.pack();
+        frame.setVisible(true);
+        table.show();
+
         String pattern = "MM/dd/yyyy";
         SimpleDateFormat format = new SimpleDateFormat(pattern);
         Date dateNow = new Date();
@@ -519,14 +507,14 @@ public class DatabaseConstantProvider implements ConstantProvider {
         System.out.println("is_valid_run_end = " + isValidRunEnd);
 
         // List all available condition names
-	//        Vector<ConditionType> cndTypes = provider.getConditionTypes();
+        //Vector<ConditionType> cndTypes = provider.getConditionTypes();
         //HashMap<String, ConditionType> cndTypeByNames = provider.getConditionTypeByNames();
         // get double
-           double sol_scale = provider_rcdb.getCondition(runNumber, "solenoid_scale").toDouble();
-           System.out.println("solenoid_scale = " + sol_scale);
-           double tor_scale = provider_rcdb.getCondition(runNumber, "torus_scale").toDouble();
-           System.out.println("torus_scale = " + tor_scale);
-           provider_rcdb.close();
+        double sol_scale = provider_rcdb.getCondition(runNumber, "solenoid_scale").toDouble();
+        System.out.println("solenoid_scale = " + sol_scale);
+        double tor_scale = provider_rcdb.getCondition(runNumber, "torus_scale").toDouble();
+        System.out.println("torus_scale = " + tor_scale);
+        provider_rcdb.close();
     }
 
 }
