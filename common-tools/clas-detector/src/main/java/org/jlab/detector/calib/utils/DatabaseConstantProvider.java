@@ -1,14 +1,9 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
 package org.jlab.detector.calib.utils;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +43,10 @@ public class DatabaseConstantProvider implements ConstantProvider {
     private Integer dataYear       = 118;
     private Integer dataMonth      = 1;
     private Date    databaseDate   = new Date();
+  
+    public static final int DEFAULT_INDICES = 3;
+    public static final String[] indexNamesDet = new String[]{"sector","layer","component","order"};
+    public static final String[] indexNamesDaq = new String[]{"crate","slot","channel"};
     
     private org.jlab.ccdb.JDBCProvider provider;
     
@@ -203,127 +202,129 @@ public class DatabaseConstantProvider implements ConstantProvider {
      * @return 
      */
     public CalibrationConstants  readConstants(String table_name){
-        
+
         Assignment asgmt = provider.getData(table_name);
         int ncolumns = asgmt.getColumnCount();
         Vector<TypeTableColumn> typecolumn = asgmt.getTypeTable().getColumns();
         String[] format = new String[ncolumns-3];
 
         for(int loop = 3; loop < ncolumns; loop++){
-            //System.out.println("COLUMN " + typecolumn.get(loop).getName() 
-            //        + "  " + typecolumn.get(loop).getCellType().name());
             if(typecolumn.get(loop).getCellType().name().compareTo("DOUBLE")==0){
                 format[loop-3] = typecolumn.get(loop).getName() + "/D";
             } else {
                 format[loop-3] = typecolumn.get(loop).getName() + "/I";
             }
-            //format[loop-3] = 
         }
-        
+
         CalibrationConstants  table = new CalibrationConstants(3,format);
         for(int i = 0; i < 3; i++){
             table.setIndexName(i, typecolumn.get(i).getName());
         }
         table.show();
-                List< Vector<String> >  tableRows = new ArrayList< Vector<String> >();
-        
-        
+        List< Vector<String> >  tableRows = new ArrayList< Vector<String> >();
+
         for(int loop = 0; loop < ncolumns; loop++){
             String name = typecolumn.get(loop).getName();
             Vector<String> column = asgmt.getColumnValuesString(name);
             tableRows.add(column);
         }
-        
+
         int nrows = tableRows.get(0).size();
-        
+
         for(int nr = 0 ; nr < nrows; nr++){
             String[] values = new String[ncolumns];
             for(int nc = 0; nc < ncolumns; nc++){
                 values[nc] = tableRows.get(nc).get(nr);
             }
-            /*System.out.println("\n LENGTH = " + values.length);
-            for(String item : values){
-                System.out.print(item + "  :  ");
-            }*/
-            //table.addRow(values);
             table.addEntryFromString(values);
         }
-        /*
-                String[] values = new String[row.size()];
-                System.out.println("VALUES SIZE = " + row.size());
-                for(int el = 0; el < row.size(); el++){
-                    values[el] = row.elementAt(el);                    
-                    //for(String cell: row){
-                    //System.out.print(cell + " ");
-                }
-                table.addRow(values);
-        }*/
         return table;  
     }
-    
-    public IndexedTable  readTable(String table_name){
-        return this.readTable(table_name, 3);
+ 
+    /**
+     * Check for an exact match of column names and integer type.
+     * @param names
+     * @param ttc
+     * @return 
+     */
+    public static int countIndices(String[] names, Vector<TypeTableColumn> ttc) {
+        int ret = 0;        
+        for (int loop = 0; loop < names.length && loop<ttc.size(); loop++) {
+            if (ttc.get(loop).getCellType().name().compareTo("INTEGER")!=0) {
+                break;
+            }
+            if (!ttc.get(loop).getName().equals(indexNamesDet[loop])) {
+                break;
+            }
+            ret++;
+        }
+        return ret;
     }
     
+    /**
+     * Check whether it matches the standard index names.
+     * @param ttc
+     * @return 
+     */
+    public static int countIndices(Vector<TypeTableColumn> ttc) {
+        if (countIndices(indexNamesDet,ttc) > 0) {
+            return countIndices(indexNamesDet,ttc);
+        }
+        if (countIndices(indexNamesDaq,ttc) > 0) {
+            return countIndices(indexNamesDaq,ttc);
+        }
+        return -1;
+    }
+
+    public IndexedTable  readTable(String table_name){
+        return this.readTable(table_name, -1);
+    }
+
     public IndexedTable  readTable(String table_name,int nindex){
 
         Assignment asgmt = provider.getData(table_name);
         int ncolumns = asgmt.getColumnCount();
         Vector<TypeTableColumn> typecolumn = asgmt.getTypeTable().getColumns();
-        
+
+        if (nindex<0) {
+            nindex = countIndices(typecolumn);
+        }
+        if (nindex<0) {
+            nindex = DEFAULT_INDICES;
+        }
+
         String[] format = new String[ncolumns-nindex];
 
         for(int loop = nindex; loop < ncolumns; loop++){
-            //System.out.println("COLUMN " + typecolumn.get(loop).getName() 
-            //        + "  " + typecolumn.get(loop).getCellType().name());
             if(typecolumn.get(loop).getCellType().name().compareTo("DOUBLE")==0){
                 format[loop-nindex] = typecolumn.get(loop).getName() + "/D";
             } else {
                 format[loop-nindex] = typecolumn.get(loop).getName() + "/I";
             }
-            //format[loop-3] = 
         }
-        
+
         IndexedTable  table = new IndexedTable(nindex,format);
         for(int i = 0; i < nindex; i++){
             table.setIndexName(i, typecolumn.get(i).getName());
         }
-        //table.show();
-                
-        
+
         List< Vector<String> >  tableRows = new ArrayList< Vector<String> >();
-        
-        
+
         for(int loop = 0; loop < ncolumns; loop++){
             String name = typecolumn.get(loop).getName();
-                Vector<String> column = asgmt.getColumnValuesString(name);
-                tableRows.add(column);
+            Vector<String> column = asgmt.getColumnValuesString(name);
+            tableRows.add(column);
         }
-        
+
         int nrows = tableRows.get(0).size();
-        
+
         for(int nr = 0 ; nr < nrows; nr++){
             String[] values = new String[ncolumns];
             for(int nc = 0; nc < ncolumns; nc++){
                 values[nc] = tableRows.get(nc).get(nr);
             }
-            /*System.out.println("\n LENGTH = " + values.length);
-            for(String item : values){
-                System.out.print(item + "  :  ");
-            }*/
-            //table.addRow(values);
             table.addEntryFromString(values);
         }
-        /*
-                String[] values = new String[row.size()];
-                System.out.println("VALUES SIZE = " + row.size());
-                for(int el = 0; el < row.size(); el++){
-                    values[el] = row.elementAt(el);                    
-                    //for(String cell: row){
-                    //System.out.print(cell + " ");
-                }
-                table.addRow(values);
-        }*/
         return table;        
     }
     
